@@ -732,3 +732,50 @@ func TestChannelOtherSettingsValidateToolLossPolicy(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "tool_loss_policy")
 }
+
+func TestChannelSettingsProxyPoolSelection(t *testing.T) {
+	pool := []string{"socks5h://pool-a:1080", " socks5h://pool-b:1080 ", "", "socks5h://pool-c:1080"}
+
+	settings := ChannelSettings{Proxy: "socks5h://single:1080", ProxyPool: pool}
+	assert.Equal(t, []string{"socks5h://pool-a:1080", "socks5h://pool-b:1080", "socks5h://pool-c:1080"}, settings.ProxyPoolEntries())
+	assert.Equal(t, settings.ProxyPoolEntries(), settings.ProxyEndpoints())
+
+	seen := make(map[string]int)
+	for range 200 {
+		picked := settings.PickProxy()
+		require.Contains(t, settings.ProxyPoolEntries(), picked)
+		seen[picked]++
+	}
+	assert.Len(t, seen, 3, "every pool entry must be reachable")
+
+	// A channel without a pool keeps dialing its single proxy.
+	require.Equal(t, "socks5h://single:1080", (ChannelSettings{Proxy: "socks5h://single:1080"}).PickProxy())
+	assert.Nil(t, (ChannelSettings{Proxy: "socks5h://single:1080"}).ProxyPoolEntries())
+	assert.Equal(t, []string{"socks5h://single:1080"}, (ChannelSettings{Proxy: "socks5h://single:1080"}).ProxyEndpoints())
+
+	// A pool of blank lines is the same as no pool at all.
+	blank := ChannelSettings{Proxy: "socks5h://single:1080", ProxyPool: []string{"", "   "}}
+	assert.Nil(t, blank.ProxyPoolEntries())
+	assert.Equal(t, "socks5h://single:1080", blank.PickProxy())
+
+	// No proxy configured at all stays direct.
+	assert.Empty(t, (ChannelSettings{}).PickProxy())
+	assert.Nil(t, (ChannelSettings{}).ProxyEndpoints())
+}
+
+func TestChannelSettingsProxyPoolJSONRoundTrip(t *testing.T) {
+	legacy := `{"proxy":"socks5h://single:1080"}`
+	var settings ChannelSettings
+	require.NoError(t, json.Unmarshal([]byte(legacy), &settings))
+	assert.Nil(t, settings.ProxyPool)
+	encoded, err := json.Marshal(settings)
+	require.NoError(t, err)
+	assert.NotContains(t, string(encoded), "proxy_pool", "a channel without a pool must not gain the field")
+
+	pooled := ChannelSettings{ProxyPool: []string{"socks5h://a:1080", "socks5h://b:1080"}}
+	encoded, err = json.Marshal(pooled)
+	require.NoError(t, err)
+	var decoded ChannelSettings
+	require.NoError(t, json.Unmarshal(encoded, &decoded))
+	assert.Equal(t, pooled.ProxyPool, decoded.ProxyPool)
+}

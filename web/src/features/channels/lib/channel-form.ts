@@ -53,6 +53,11 @@ const SUPPORTED_PROXY_PROTOCOLS = new Set([
   'socks5h:',
 ])
 
+function isOptionalProxyPool(value: string | undefined): boolean {
+  const lines = (value || '').split('\n')
+  return lines.every((line) => isOptionalProxyURL(line))
+}
+
 function isOptionalProxyURL(value: string | undefined): boolean {
   const trimmedValue = value?.trim() || ''
   if (!trimmedValue) return true
@@ -266,6 +271,10 @@ export const channelFormSchema = z
       .string()
       .optional()
       .refine(isOptionalProxyURL, ERROR_MESSAGES.INVALID_PROXY),
+    proxy_pool: z
+      .string()
+      .optional()
+      .refine(isOptionalProxyPool, ERROR_MESSAGES.INVALID_PROXY),
     http_protocol: z.enum(['auto', 'http1']).optional(),
     http2_connection_shards: z.number().int().optional(),
     pass_through_body_enabled: z.boolean().optional(),
@@ -457,6 +466,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   force_format: false,
   thinking_to_content: false,
   proxy: '',
+  proxy_pool: '',
   http_protocol: HTTP_PROTOCOL_AUTO,
   http2_connection_shards: 1,
   pass_through_body_enabled: false,
@@ -501,6 +511,7 @@ export function transformChannelToFormDefaults(
     force_format: false,
     thinking_to_content: false,
     proxy: '',
+    proxy_pool: '',
     http_protocol: HTTP_PROTOCOL_AUTO as 'auto' | 'http1',
     http2_connection_shards: 1,
     pass_through_body_enabled: false,
@@ -522,6 +533,7 @@ export function transformChannelToFormDefaults(
         force_format: parsed.force_format || false,
         thinking_to_content: parsed.thinking_to_content || false,
         proxy: parsed.proxy || '',
+        proxy_pool: readProxyPool(parsed.proxy_pool),
         http_protocol: protocol,
         http2_connection_shards: protocol === HTTP_PROTOCOL_HTTP1 ? 1 : shards,
         pass_through_body_enabled: parsed.pass_through_body_enabled || false,
@@ -655,6 +667,7 @@ export function buildSettingJSON(formData: ChannelFormValues): string {
     force_format: formData.force_format || false,
     thinking_to_content: formData.thinking_to_content || false,
     proxy: formData.proxy?.trim() || '',
+    proxy_pool: buildProxyPool(formData.proxy_pool),
     pass_through_body_enabled:
       formData.type !== CHANNEL_TYPE_ADVANCED_CUSTOM &&
       formData.pass_through_body_enabled === true,
@@ -679,6 +692,30 @@ export function buildSettingJSON(formData: ChannelFormValues): string {
   }
 
   return JSON.stringify(settingObj)
+}
+
+/**
+ * Read the channel proxy pool into the newline-separated form value.
+ */
+function readProxyPool(value: unknown): string {
+  if (!Array.isArray(value)) return ''
+  return value
+    .filter((entry): entry is string => typeof entry === 'string')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .join('\n')
+}
+
+/**
+ * Build the channel proxy pool array from the form value. Blank lines are
+ * dropped, and an empty pool is omitted so unchanged channels keep their JSON.
+ */
+function buildProxyPool(value: string | undefined): string[] | undefined {
+  const entries = (value || '')
+    .split('\n')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+  return entries.length > 0 ? entries : undefined
 }
 
 /**

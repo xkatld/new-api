@@ -999,6 +999,13 @@ func (channel *Channel) ValidateSettings() error {
 	if _, err := common.ParseProxyURLStrict(channelParams.Proxy); err != nil {
 		return fmt.Errorf("invalid channel proxy: %w", err)
 	}
+	for _, poolEntry := range channelParams.ProxyPoolEntries() {
+		if _, err := common.ParseProxyURLStrict(poolEntry); err != nil {
+			return fmt.Errorf("invalid channel proxy pool entry %q: %w", poolEntry, err)
+		}
+	}
+	channelParams.ProxyPool = channelParams.ProxyPoolEntries()
+	channel.SetSetting(*channelParams)
 	if err := channelParams.ValidateHTTPTransport(); err != nil {
 		return err
 	}
@@ -1044,6 +1051,13 @@ func (channel *Channel) GetSetting() dto.ChannelSettings {
 		}
 	}
 	return setting
+}
+
+// GetProxyForAttempt returns the proxy one outbound attempt should dial through.
+// A configured proxy pool is sampled at random per call; the single proxy field
+// remains the fallback for channels without a pool.
+func (channel *Channel) GetProxyForAttempt() string {
+	return channel.GetSetting().PickProxy()
 }
 
 func (channel *Channel) SetSetting(setting dto.ChannelSettings) {

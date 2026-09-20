@@ -589,7 +589,12 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	common.SetContextKey(c, constant.ContextKeyChannelName, channel.Name)
 	common.SetContextKey(c, constant.ContextKeyChannelType, channel.Type)
 	common.SetContextKey(c, constant.ContextKeyChannelCreateTime, channel.CreatedTime)
-	common.SetContextKey(c, constant.ContextKeyChannelSetting, channel.GetSetting())
+	// Resolve the proxy for this attempt before the setting reaches the relay.
+	// A channel proxy pool is sampled per attempt, so a retry dials a different
+	// entry while every consumer of ChannelSetting.Proxy stays unchanged.
+	channelSetting := channel.GetSetting()
+	channelSetting.Proxy = channelSetting.PickProxy()
+	common.SetContextKey(c, constant.ContextKeyChannelSetting, channelSetting)
 	common.SetContextKey(c, constant.ContextKeyChannelOtherSetting, channel.GetOtherSettings())
 	switch channel.Type {
 	case constant.ChannelTypeTaskPlugin:

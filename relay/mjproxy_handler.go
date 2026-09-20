@@ -37,7 +37,7 @@ func RelayMidjourneyImage(c *gin.Context) {
 	var httpClient *http.Client
 	var proxy string
 	if channel, err := model.CacheGetChannel(midjourneyTask.ChannelId); err == nil {
-		proxy = channel.GetSetting().Proxy
+		proxy = channel.GetProxyForAttempt()
 		if proxy != "" {
 			if httpClient, err = service.GetHttpClientWithProxy(proxy); err != nil {
 				c.JSON(400, gin.H{

@@ -28,6 +28,9 @@ export const STATIC_I18N_KEYS = [
   'No enabled channel key',
   'Invalid channel header override',
   'Invalid channel proxy',
+  'Proxy Pool',
+  'One proxy per line. When set, each request picks a random entry and the single proxy above is ignored. Supports HTTP, HTTPS, SOCKS5, and SOCKS5H.',
+  'socks5h://user:pass@host:port',
   'For this channel, map the model name in client requests to the model name sent upstream.',
   // Channel provider labels, descriptions and presentation badges.
   'Zhipu GLM',

@@ -552,7 +552,10 @@ func (s *responsesWSSession) restoreConnectionContext(c *gin.Context, model stri
 		!reflect.DeepEqual(channel.GetHeaderOverride(), s.lockedContext[appconstant.ContextKeyChannelHeaderOverride]) {
 		return types.NewErrorWithStatusCode(errors.New("upstream connection settings changed; reconnect required"), types.ErrorCodeAccessDenied, http.StatusForbidden, types.ErrOptionWithSkipRetry())
 	}
-	if previous, ok := s.lockedContext[appconstant.ContextKeyChannelSetting].(dto.ChannelSettings); ok && previous.Proxy != channel.GetSetting().Proxy {
+	// The locked context holds the proxy sampled for the handshake attempt, so a
+	// pool is compared against its configured entries rather than that sample.
+	if previous, ok := s.lockedContext[appconstant.ContextKeyChannelSetting].(dto.ChannelSettings); ok &&
+		!service.SameProxyEndpointSet(previous.ProxyEndpoints(), channel.GetSetting().ProxyEndpoints()) {
 		return types.NewErrorWithStatusCode(errors.New("upstream proxy changed; reconnect required"), types.ErrorCodeAccessDenied, http.StatusForbidden, types.ErrOptionWithSkipRetry())
 	}
 	// An advanced custom connection was dialed through the route matched for

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -194,4 +195,64 @@ func TestInferencePresetSettingsAndDatabaseRoundTrip(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestChannelValidateSettingsProxyPool(t *testing.T) {
+	tests := []struct {
+		name    string
+		setting dto.ChannelSettings
+		wantErr string
+	}{
+		{
+			name:    "valid pool with mixed schemes",
+			setting: dto.ChannelSettings{ProxyPool: []string{"socks5h://127.0.0.1:1080", "http://127.0.0.1:8080"}},
+		},
+		{
+			name:    "blank lines are dropped instead of rejected",
+			setting: dto.ChannelSettings{ProxyPool: []string{"socks5h://127.0.0.1:1080", "", "  "}},
+		},
+		{
+			name:    "invalid pool entry rejected",
+			setting: dto.ChannelSettings{ProxyPool: []string{"socks5h://127.0.0.1:1080", "not-a-proxy"}},
+			wantErr: "invalid channel proxy pool entry",
+		},
+		{
+			name:    "unsupported scheme rejected",
+			setting: dto.ChannelSettings{ProxyPool: []string{"ftp://127.0.0.1:21"}},
+			wantErr: "invalid channel proxy pool entry",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			channel := &Channel{}
+			channel.SetSetting(tt.setting)
+			err := channel.ValidateSettings()
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+				// Validation normalizes the stored pool so blank lines never
+				// survive into the channel cache.
+				for _, entry := range channel.GetSetting().ProxyPool {
+					assert.NotEmpty(t, strings.TrimSpace(entry))
+				}
+				return
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
+}
+
+func TestChannelGetProxyForAttemptUsesPool(t *testing.T) {
+	channel := &Channel{}
+	channel.SetSetting(dto.ChannelSettings{
+		Proxy:     "socks5h://single:1080",
+		ProxyPool: []string{"socks5h://pool-a:1080", "socks5h://pool-b:1080"},
+	})
+	for range 50 {
+		assert.Contains(t, []string{"socks5h://pool-a:1080", "socks5h://pool-b:1080"}, channel.GetProxyForAttempt())
+	}
+
+	channel.SetSetting(dto.ChannelSettings{Proxy: "socks5h://single:1080"})
+	assert.Equal(t, "socks5h://single:1080", channel.GetProxyForAttempt())
 }

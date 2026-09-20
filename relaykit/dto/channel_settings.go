@@ -2,6 +2,7 @@ package dto
 
 import (
 	"fmt"
+	"math/rand"
 	"net/url"
 	"regexp"
 	"slices"
@@ -12,14 +13,18 @@ import (
 )
 
 type ChannelSettings struct {
-	TaskPluginKey             string `json:"task_plugin_key,omitempty"`
-	ForceFormat               bool   `json:"force_format,omitempty"`
-	ThinkingToContent         bool   `json:"thinking_to_content,omitempty"`
-	Proxy                     string `json:"proxy"`
-	PassThroughBodyEnabled    bool   `json:"pass_through_body_enabled,omitempty"`
-	ResponsesWebSocketEnabled bool   `json:"responses_websocket_enabled,omitempty"`
-	SystemPrompt              string `json:"system_prompt,omitempty"`
-	SystemPromptOverride      bool   `json:"system_prompt_override,omitempty"`
+	TaskPluginKey     string `json:"task_plugin_key,omitempty"`
+	ForceFormat       bool   `json:"force_format,omitempty"`
+	ThinkingToContent bool   `json:"thinking_to_content,omitempty"`
+	Proxy             string `json:"proxy"`
+	// ProxyPool holds the channel's proxy pool. When it is non-empty every
+	// attempt picks one entry at random and ignores Proxy, which stays as the
+	// single-proxy fallback so existing channels keep their behaviour.
+	ProxyPool                 []string `json:"proxy_pool,omitempty"`
+	PassThroughBodyEnabled    bool     `json:"pass_through_body_enabled,omitempty"`
+	ResponsesWebSocketEnabled bool     `json:"responses_websocket_enabled,omitempty"`
+	SystemPrompt              string   `json:"system_prompt,omitempty"`
+	SystemPromptOverride      bool     `json:"system_prompt_override,omitempty"`
 	// TaskExtendPluginKeys lists the task plugins a New API channel (type 60)
 	// is extended with. The upstream gateway may host many plugins, so the
 	// channel serves every listed plugin's models while the request still pins
@@ -32,6 +37,49 @@ type ChannelSettings struct {
 	// HTTP2ConnectionShards spreads HTTP/2 traffic across N independent transports
 	// (1-8). Zero/unset means 1. Ignored when HTTPProtocol is "http1".
 	HTTP2ConnectionShards int `json:"http2_connection_shards,omitempty"`
+}
+
+// ProxyPoolEntries returns the configured pool entries with blank lines removed.
+// It returns nil when the pool is empty, which makes "no pool configured" and
+// "pool configured with only blank lines" behave identically.
+func (s ChannelSettings) ProxyPoolEntries() []string {
+	if len(s.ProxyPool) == 0 {
+		return nil
+	}
+	entries := make([]string, 0, len(s.ProxyPool))
+	for _, entry := range s.ProxyPool {
+		if entry = strings.TrimSpace(entry); entry != "" {
+			entries = append(entries, entry)
+		}
+	}
+	if len(entries) == 0 {
+		return nil
+	}
+	return entries
+}
+
+// PickProxy chooses the proxy for one attempt. A configured pool wins over the
+// single Proxy field and is sampled at random; callers must not cache the
+// result beyond the attempt, since a channel retry is expected to sample again.
+func (s ChannelSettings) PickProxy() string {
+	entries := s.ProxyPoolEntries()
+	if len(entries) == 0 {
+		return s.Proxy
+	}
+	return entries[rand.Intn(len(entries))]
+}
+
+// ProxyEndpoints lists every proxy URL the channel can dial, for cache
+// invalidation when the channel is edited or deleted.
+func (s ChannelSettings) ProxyEndpoints() []string {
+	entries := s.ProxyPoolEntries()
+	if len(entries) == 0 {
+		if s.Proxy == "" {
+			return nil
+		}
+		return []string{s.Proxy}
+	}
+	return entries
 }
 
 // BindsTaskPlugin reports whether the channel is bound to the task plugin,

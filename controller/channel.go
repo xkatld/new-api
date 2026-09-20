@@ -872,11 +872,11 @@ func AddChannel(c *gin.Context) {
 func DeleteChannel(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	channelName := ""
-	channelProxy := ""
+	var channelProxies []string
 	channelLookupFailed := false
 	if existing, err := model.GetChannelById(id, false); err == nil && existing != nil {
 		channelName = existing.Name
-		channelProxy = existing.GetSetting().Proxy
+		channelProxies = existing.GetSetting().ProxyEndpoints()
 	} else {
 		channelLookupFailed = true
 	}
@@ -890,7 +890,7 @@ func DeleteChannel(c *gin.Context) {
 	if channelLookupFailed {
 		service.ResetProxyClientCache()
 	} else {
-		service.InvalidateProxyClient(channelProxy)
+		service.InvalidateProxyClients(channelProxies)
 	}
 	recordManageAudit(c, "channel.delete", map[string]any{
 		"id":   id,
@@ -1165,13 +1165,11 @@ func UpdateChannel(c *gin.Context) {
 		})
 		return
 	}
-	originProxy := originChannel.GetSetting().Proxy
+	originProxies := originChannel.GetSetting().ProxyEndpoints()
 	proxyChanged := false
 	_, settingProvided := requestData["setting"]
 	if settingProvided {
-		newProxy, _ := service.NormalizeProxyURL(channel.GetSetting().Proxy)
-		normalizedOriginProxy, originProxyErr := service.NormalizeProxyURL(originProxy)
-		proxyChanged = originProxyErr != nil || normalizedOriginProxy != newProxy
+		proxyChanged = !service.SameProxyEndpointSet(channel.GetSetting().ProxyEndpoints(), originProxies)
 	}
 	// Changing which plugins a channel binds needs the bind permission on any
 	// channel type; resubmitting an unchanged New API binding list does not, so
@@ -1287,7 +1285,7 @@ func UpdateChannel(c *gin.Context) {
 	}
 	model.InitChannelCache()
 	if proxyChanged {
-		service.InvalidateProxyClient(originProxy)
+		service.InvalidateProxyClients(originProxies)
 	}
 	// 记录变更的字段名（语言无关的字段标识），密钥仅记录"已更换"绝不记录内容。
 	changedFields := make([]string, 0)

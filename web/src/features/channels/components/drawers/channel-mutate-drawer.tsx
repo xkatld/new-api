@@ -297,6 +297,7 @@ const SENSITIVE_FORM_FIELDS = [
   'force_format',
   'thinking_to_content',
   'proxy',
+  'proxy_pool',
   'http_protocol',
   'http2_connection_shards',
   'pass_through_body_enabled',
@@ -1807,6 +1808,31 @@ export function ChannelMutateDrawer({
           <FormDescription>
             {t(
               'Network proxy for this channel (supports HTTP, HTTPS, SOCKS5, and SOCKS5H)'
+            )}
+          </FormDescription>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  )
+
+  const proxyPoolFields = (
+    <FormField
+      control={form.control}
+      name='proxy_pool'
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>{t('Proxy Pool')}</FormLabel>
+          <FormControl>
+            <Textarea
+              placeholder={t('socks5h://user:pass@host:port')}
+              rows={4}
+              {...field}
+            />
+          </FormControl>
+          <FormDescription>
+            {t(
+              'One proxy per line. When set, each request picks a random entry and the single proxy above is ignored. Supports HTTP, HTTPS, SOCKS5, and SOCKS5H.'
             )}
           </FormDescription>
           <FormMessage />
@@ -4688,6 +4714,7 @@ export function ChannelMutateDrawer({
               >
                 {taskPollingFields}
                 {proxyFields}
+                {proxyPoolFields}
                 {httpProtocolFields}
                 {httpShardsFields}
               </fieldset>

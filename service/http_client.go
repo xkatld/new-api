@@ -445,6 +445,49 @@ func InvalidateProxyClient(rawProxyURL string) {
 	}
 }
 
+// InvalidateProxyClients removes cached clients for every proxy the channel can
+// dial. Editing or deleting a channel invalidates the whole set, so a pool entry
+// that was just removed does not keep a warm connection pool behind.
+func InvalidateProxyClients(rawProxyURLs []string) {
+	for _, rawProxyURL := range rawProxyURLs {
+		InvalidateProxyClient(rawProxyURL)
+	}
+}
+
+// SameProxyEndpointSet reports whether two proxy endpoint lists dial the same
+// set of proxies. Order and legacy suffixes do not count as a change, and an
+// unparsable entry compares by its trimmed literal so a broken value still
+// triggers invalidation instead of being silently ignored.
+func SameProxyEndpointSet(a []string, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	counts := make(map[string]int, len(a))
+	for _, rawProxyURL := range a {
+		counts[canonicalProxyEndpoint(rawProxyURL)]++
+	}
+	for _, rawProxyURL := range b {
+		key := canonicalProxyEndpoint(rawProxyURL)
+		counts[key]--
+		if counts[key] < 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func canonicalProxyEndpoint(rawProxyURL string) string {
+	trimmedProxyURL := strings.TrimSpace(rawProxyURL)
+	if trimmedProxyURL == "" {
+		return ""
+	}
+	canonicalKey, err := NormalizeProxyURL(trimmedProxyURL)
+	if err != nil {
+		return trimmedProxyURL
+	}
+	return canonicalKey
+}
+
 // ResetProxyClientCache clears cached proxy and non-default direct policy clients
 // and closes idle connections on every transport/shard. The package-level default
 // httpClient pointer stays stable after InitHttpClient; it is only closed and

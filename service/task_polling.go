@@ -263,7 +263,7 @@ func updateBatchTasks(ctx context.Context, adaptor BatchTaskPollingAdaptor, chan
 		}
 		return err
 	}
-	proxy := ch.GetSetting().Proxy
+	proxy := ch.GetProxyForAttempt()
 	baseURL := ch.GetBaseURL()
 	if baseURL == "" {
 		baseURL = constant.GetChannelBaseURL(ch.Type)
@@ -480,7 +480,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	if ch.GetBaseURL() != "" {
 		baseURL = ch.GetBaseURL()
 	}
-	proxy := ch.GetSetting().Proxy
+	proxy := ch.GetProxyForAttempt()
 
 	task := taskM[taskId]
 	if task == nil {
